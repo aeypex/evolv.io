@@ -89,6 +89,7 @@ public class Creature extends SoftBody {
 		}
 		inputs[Configuration.NUM_EYES * 3] = getEnergy();
 		inputs[Configuration.NUM_EYES * 3 + 1] = mouthHue;
+		
 		brain.input(inputs);
 
 		if (useOutput) {
@@ -157,7 +158,9 @@ public class Creature extends SoftBody {
 		/*
 		 * the older the more work necessary
 		 */
-		loseEnergy(getEnergy() * Configuration.METABOLISM_ENERGY * getAge() * timeStep);
+		loseEnergy((getEnergy() * Configuration.METABOLISM_ENERGY 
+				+ getAge() * Configuration.METABOLISM_AGE_MODIFIER) 
+				* timeStep);
 
 		if (getEnergy() < Configuration.SAFE_SIZE) {
 			returnToEarth();
@@ -282,7 +285,7 @@ public class Creature extends SoftBody {
 	}
 
 	public void returnToEarth() {
-		int pieces = 20;
+		int pieces = 1; //changed to 1 because performance
 		for (int i = 0; i < pieces; i++) {
 			getRandomCoveredTile().addFood(getEnergy() / pieces, getHue(), true);
 		}
