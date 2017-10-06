@@ -182,11 +182,15 @@ public class Creature extends SoftBody {
 	}
 
 	public void rotate(double amount, double timeStep) {
+		if (getRandomCoveredTile().isWater()) {
+			return; // dont turn on water
+		}
 		vr += amount * timeStep;
 		if (amount > 0.5) 
 			rotation += Configuration.CREATURE_TURN_AMOUNT_DEGREE* timeStep;
 		if (amount < -0.5) 
 			rotation -= Configuration.CREATURE_TURN_AMOUNT_DEGREE* timeStep;
+		rotation = rotation % 180;
 		//rotation += vr;
 		//vr *= Math.max(0, 1 - Configuration.FRICTION / getMass());
 		looseEnergy(Math.abs(amount * Configuration.TURN_ENERGY * timeStep));
