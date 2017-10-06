@@ -5,9 +5,9 @@ import java.util.List;
 import evolv.io.util.MathUtil;
 
 public class Brain {
-	private static final int BRAIN_HEIGHT = Configuration.NUM_EYES * 3 + Configuration.MEMORY_COUNT + 6;
+	private static final int BRAIN_HEIGHT = Configuration.BRAIN_HEIGHT;
 	private static final String[] INPUT_LABELS = new String[BRAIN_HEIGHT];
-	private static final String[] OUTPUT_LABELS = new String[7];
+	private static final String[] OUTPUT_LABELS = new String[BRAIN_HEIGHT];
 	static final float NEURON_SPACING = 1.1f;
 	static final int NEURON_OFFSET_X = -85;
 	static final int NEURON_OFFSET_Y = 20;
@@ -19,41 +19,46 @@ public class Brain {
 
 	static {
 		// input
-		INPUT_LABELS[0] = "Size";
-		INPUT_LABELS[1] = "M Hue";
-		
-		for (int i = 2; i < Configuration.NUM_EYES * 3 + 2; i += 3) {
-			INPUT_LABELS[i] = "Hue " + i / 3;
-			INPUT_LABELS[i + 1] = "Sat " + ((i - 1) / 3);
-			INPUT_LABELS[i + 2] = "Bri " + ((i - 1) / 3);
+		{
+			int i = 0;
+			INPUT_LABELS[i++] = "Size";
+			INPUT_LABELS[i++] = "M Hue";
+			INPUT_LABELS[i++] = "Age";
+			
+			int n = i;
+			while( i < Configuration.NUM_EYES * 3 + n) {
+				INPUT_LABELS[i++] = "Hue " + i / 3;
+				INPUT_LABELS[i++] = "Sat " + ((i - 1) / 3);
+				INPUT_LABELS[i++] = "Bri " + ((i - 1) / 3);
+			}
+			n = i;
+			while( i < Configuration.BRAIN_MEMORY_COUNT + n) {
+				INPUT_LABELS[i++] = "MEM<-";
+			}
+			n = i;
+			while( i < Configuration.BRAIN_CONST_NUM + n) {
+				INPUT_LABELS[i++] = "CONST<-";
+			}
 		}
-		
 		// output
-		OUTPUT_LABELS[0] = "Body Hue";
-		OUTPUT_LABELS[1] = "Accelerate";
-		OUTPUT_LABELS[2] = "Turn";
-		OUTPUT_LABELS[3] = "Eat";
-		OUTPUT_LABELS[4] = "Fight";
-		OUTPUT_LABELS[5] = "Procreate";
-		OUTPUT_LABELS[6] = "Mouth Hue";
-		
-		// TODO do we need a memory and const output?
-
-		// memory
-		for (int i = 0; i < Configuration.MEMORY_COUNT; i++) {
-			INPUT_LABELS[i + Configuration.NUM_EYES * 3 + 2] = "Mem.";
+		{
+			int i = 0;
+			OUTPUT_LABELS[i++] = "Body Hue";
+			OUTPUT_LABELS[i++] = "Accelerate";
+			OUTPUT_LABELS[i++] = "Turn";
+			OUTPUT_LABELS[i++] = "Eat";
+			OUTPUT_LABELS[i++] = "Fight";
+			OUTPUT_LABELS[i++] = "Procreate";
+			OUTPUT_LABELS[i++] = "Mouth Hue";
 		}
-
-		// TODO is this the bias?
-		// const
-		INPUT_LABELS[BRAIN_HEIGHT - 1] = "Const.";
+		
 	}
 
 	public Brain(EvolvioColor evolvioColor, Axon[][][] tbrain, double[][] tneurons) {
 		this.evolvioColor = evolvioColor;
 		// initialize brain
 		if (tbrain == null) {
-			axons = new Axon[Configuration.BRAIN_WIDTH - 1][BRAIN_HEIGHT][BRAIN_HEIGHT - 1];
+			axons = new Axon[Configuration.BRAIN_WIDTH - 1][BRAIN_HEIGHT][BRAIN_HEIGHT];
 			neurons = new double[Configuration.BRAIN_WIDTH][BRAIN_HEIGHT];
 			for (int x = 0; x < Configuration.BRAIN_WIDTH - 1; x++) {
 				for (int y = 0; y < BRAIN_HEIGHT; y++) {
@@ -79,7 +84,7 @@ public class Brain {
 
 	public Brain evolve(List<Creature> parents) {
 		int parentsTotal = parents.size();
-		Axon[][][] newBrain = new Axon[Configuration.BRAIN_WIDTH - 1][BRAIN_HEIGHT][BRAIN_HEIGHT - 1];
+		Axon[][][] newBrain = new Axon[Configuration.BRAIN_WIDTH - 1][BRAIN_HEIGHT][BRAIN_HEIGHT];
 		double[][] newNeurons = new double[Configuration.BRAIN_WIDTH][BRAIN_HEIGHT];
 		float randomParentRotation = this.evolvioColor.random(0, 1);
 		for (int x = 0; x < Configuration.BRAIN_WIDTH - 1; x++) {
@@ -157,31 +162,39 @@ public class Brain {
 
 	public void input(double[] inputs) {
 		int end = Configuration.BRAIN_WIDTH - 1;
-		for (int i = 0; i < Configuration.NUM_EYES * 3 + 2; i++) {
+		for (int i = 0; i < inputs.length; i++)
 			neurons[0][i] = inputs[i];
-		}
-		for (int i = 0; i < Configuration.MEMORY_COUNT; i++) {
-			neurons[0][Configuration.NUM_EYES * 3 + 2 + i] = neurons[end][Configuration.NUM_EYES * 3 + 2 + i];
-		}
-		neurons[0][BRAIN_HEIGHT - 1] = 1;
-		for (int x = 1; x < Configuration.BRAIN_WIDTH; x++) {
-			for (int y = 0; y < BRAIN_HEIGHT - 1; y++) {
+			
+		for (int i = inputs.length; i<neurons[0].length;i++)
+			neurons[0][i] = neurons[end][i]; //MEM
+		
+		for (int i = Configuration.BRAIN_HEIGHT-Configuration.BRAIN_CONST_NUM; i<BRAIN_HEIGHT;i++)
+			neurons[0][i] = 1; //CONST
+		
+		
+		fireAxons();
+	}
+
+	private void fireAxons() {
+		for (int column = 1; column < Configuration.BRAIN_WIDTH; column++) {
+			for (int out = 0; out < BRAIN_HEIGHT-Configuration.BRAIN_CONST_NUM; out++) {
 				double total = 0;
-				for (int input = 0; input < BRAIN_HEIGHT; input++) {
-					total += neurons[x - 1][input] * axons[x - 1][input][y].getWeight();
-				}
-				if (x == Configuration.BRAIN_WIDTH - 1) {
+					for (int in = 0; in < BRAIN_HEIGHT; in++) {
+						total += neurons[column-1][in] * axons[column-1][in][out].getWeight();
+					}
+				neurons[column][out] = MathUtil.sigmoid(total);
+				/*if (x == Configuration.BRAIN_WIDTH - 1) {
 					neurons[x][y] = total;
 				} else {
 					neurons[x][y] = MathUtil.sigmoid(total);
-				}
+				}*/
 			}
 		}
 	}
 
 	public double[] outputs() {
 		int end = Configuration.BRAIN_WIDTH - 1;
-		double[] output = new double[7];
+		double[] output = new double[Configuration.BRAIN_OUTPUT_NUM];
 		for (int i = 0; i < output.length; i++) {
 			output[i] = neurons[end][i];
 		}

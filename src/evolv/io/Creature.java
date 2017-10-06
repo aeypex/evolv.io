@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import evolv.io.util.MathUtil;
+
 public class Creature extends SoftBody {
 	private static final List<CreatureAction> CREATURE_ACTIONS = Arrays.asList(new CreatureAction.AdjustHue(),
 			new CreatureAction.Accelerate(), new CreatureAction.Rotate(), new CreatureAction.Eat(),
@@ -30,8 +32,6 @@ public class Creature extends SoftBody {
 	private double mouthHue;
 	private double vr;
 	private double rotation;
-
-	// TODO can the size of these constructors be reduced?
 
 	public Creature(EvolvioColor evolvioColor, Board board) {
 		this(evolvioColor, board, evolvioColor.random(0, Configuration.BOARD_WIDTH),
@@ -83,15 +83,17 @@ public class Creature extends SoftBody {
 	}
 
 	public void useBrain(double timeStep, boolean useOutput) {
-		double inputs[] = new double[Configuration.NUM_EYES * 3 + 2];
-		for (int i = 0; i < Configuration.NUM_EYES * 3; i++) {
-			inputs[i] = visionResults[i];
+		{
+			double inputs[] = new double[Configuration.BRAIN_INPUT_NUM];
+			int i = 0;
+			for (; i < Configuration.NUM_EYES * 3; i++) {
+				inputs[i] = visionResults[i];
+			}
+			inputs[i++] = getEnergy();
+			inputs[i++] = mouthHue;
+			inputs[i++] = getAge();
+			brain.input(inputs);
 		}
-		inputs[Configuration.NUM_EYES * 3] = getEnergy();
-		inputs[Configuration.NUM_EYES * 3 + 1] = mouthHue;
-		
-		brain.input(inputs);
-
 		if (useOutput) {
 			double[] output = brain.outputs();
 			for (int i = 0; i < CREATURE_ACTIONS.size(); i++) {
@@ -158,7 +160,7 @@ public class Creature extends SoftBody {
 		/*
 		 * the older the more work necessary
 		 */
-		loseEnergy((getEnergy() * Configuration.METABOLISM_ENERGY 
+		looseEnergy((Configuration.METABOLISM_ENERGY 
 				+ getAge() * Configuration.METABOLISM_AGE_MODIFIER) 
 				* timeStep);
 
@@ -173,19 +175,25 @@ public class Creature extends SoftBody {
 		setVx(getVx() + Math.cos(rotation) * multiplied);
 		setVy(getVy() + Math.sin(rotation) * multiplied);
 		if (amount >= 0) {
-			loseEnergy(amount * Configuration.ACCELERATION_ENERGY * timeStep);
+			looseEnergy(amount * Configuration.ACCELERATION_ENERGY * timeStep);
 		} else {
-			loseEnergy(Math.abs(amount * Configuration.ACCELERATION_BACKWARDS_ENERGY * timeStep));
+			looseEnergy(Math.abs(amount * Configuration.ACCELERATION_BACKWARDS_ENERGY * timeStep));
 		}
 	}
 
 	public void rotate(double amount, double timeStep) {
-		vr += 0.04f * amount * timeStep / getMass();
-		loseEnergy(Math.abs(amount * Configuration.TURN_ENERGY * getEnergy() * timeStep));
+		vr += amount * timeStep;
+		if (amount > 0.5) 
+			rotation += Configuration.CREATURE_TURN_AMOUNT_DEGREE* timeStep;
+		if (amount < -0.5) 
+			rotation -= Configuration.CREATURE_TURN_AMOUNT_DEGREE* timeStep;
+		//rotation += vr;
+		//vr *= Math.max(0, 1 - Configuration.FRICTION / getMass());
+		looseEnergy(Math.abs(amount * Configuration.TURN_ENERGY * timeStep));
 	}
 
 	public Tile getRandomCoveredTile() {
-		double radius = (float) getRadius();
+		/*double radius = (float) getRadius();
 		double choiceX = 0;
 		double choiceY = 0;
 		while (EvolvioColor.dist((float) getPx(), (float) getPy(), (float) choiceX, (float) choiceY) > radius) {
@@ -193,8 +201,9 @@ public class Creature extends SoftBody {
 			choiceY = (Math.random() * 2 * radius - radius) + getPy();
 		}
 		int x = xBound((int) choiceX);
-		int y = yBound((int) choiceY);
-		return getBoard().getTile(x, y);
+		int y = yBound((int) choiceY);*/
+		//^^was too slow
+		return getBoard().getTile((int)getPx(), (int)getPy());
 	}
 
 	public void eat(double attemptedAmount, double timeStep) {
@@ -205,7 +214,6 @@ public class Creature extends SoftBody {
 				/ (1.0f + distance(0, 0, getVx(), getVy()) * Configuration.EAT_WHILE_MOVING_INEFFICIENCY_MULTIPLIER);
 		if (amount < 0) {
 			dropEnergy(-amount * timeStep);
-			loseEnergy(-attemptedAmount * Configuration.EAT_ENERGY * timeStep);
 		} else {
 			Tile coveredTile = getRandomCoveredTile();
 			// TODO can pow be replaced with something faster?
@@ -220,16 +228,15 @@ public class Creature extends SoftBody {
 			if (multiplier >= 0) {
 				addEnergy(foodToEat * multiplier);
 			} else {
-				loseEnergy(-foodToEat * multiplier);
+				looseEnergy(-foodToEat * multiplier);
 			}
-			loseEnergy(attemptedAmount * Configuration.EAT_ENERGY * timeStep);
 		}
 	}
 
 	public void fight(double amount, double timeStep) {
 		if (amount > 0 && getAge() >= Configuration.MATURE_AGE) {
 			setFightLevel(amount);
-			loseEnergy(getFightLevel() * Configuration.FIGHT_ENERGY * getEnergy() * timeStep);
+			looseEnergy(getFightLevel() * Configuration.FIGHT_ENERGY * getEnergy() * timeStep);
 			for (int i = 0; i < getColliders().size(); i++) {
 				SoftBody collider = getColliders().get(i);
 				if (collider instanceof Creature) {
@@ -246,7 +253,7 @@ public class Creature extends SoftBody {
 		}
 	}
 
-	public void loseEnergy(double energyLost) {
+	public void looseEnergy(double energyLost) {
 		if (energyLost > 0) {
 			setEnergy(getEnergy() - energyLost);
 		}
@@ -395,11 +402,9 @@ public class Creature extends SoftBody {
 	@Override
 	public void applyMotions(double timeStep) {
 		if (getRandomCoveredTile().isWater()) {
-			loseEnergy(Configuration.SWIM_ENERGY * getEnergy());
+			looseEnergy(Configuration.SWIM_ENERGY);
 		}
 		super.applyMotions(timeStep);
-		rotation += vr;
-		vr *= Math.max(0, 1 - Configuration.FRICTION / getMass());
 	}
 
 	public Brain getBrain() {

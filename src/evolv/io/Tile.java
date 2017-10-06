@@ -38,6 +38,9 @@ public class Tile {
 		return fertility > 1;
 	}
 
+	/**
+	 * @return the amount of food on the tile
+	 */
 	public double getFoodLevel() {
 		return foodLevel;
 	}
